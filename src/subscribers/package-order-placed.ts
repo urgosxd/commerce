@@ -1,6 +1,7 @@
 import type { SubscriberArgs, SubscriberConfig } from "@medusajs/medusa"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { PACKAGE_MODULE } from "../modules/package"
+import { BOOKING_FORM_MODULE } from "../modules/booking-form"
 import type PackageModuleService from "../modules/package/service"
 import { findExistingPackageBooking } from "../utils/package-booking-idempotency"
 import { getBookingStatusFromPaymentStatus } from "../utils/booking-payment-status"
@@ -98,6 +99,8 @@ export default async function handlePackageOrderPlaced({
       return
     }
 
+    const bookingFormModuleService = container.resolve(BOOKING_FORM_MODULE) as unknown as any
+
     const packageItems = (order.items || []).filter(
       (item: any) => item.metadata?.is_package === true
     )
@@ -107,6 +110,27 @@ export default async function handlePackageOrderPlaced({
 
     if (packageItems.length === 0) {
       return
+    }
+
+    // Collect unique group_ids from package items to fetch related booking forms
+    const groupIds = [
+      ...new Set(
+        packageItems
+          .map((i: any) => i.metadata?.group_id)
+          .filter((g: any) => typeof g === "string")
+      ),
+    ]
+
+    const formByGroup = new Map<string, any>()
+    if (groupIds.length > 0) {
+      const forms = await bookingFormModuleService.listBookingForms({
+        group_id: groupIds,
+      })
+      ;(forms as any[]).forEach((f: any) => {
+        if (f.group_id && !formByGroup.has(f.group_id)) {
+          formByGroup.set(f.group_id, f)
+        }
+      })
     }
 
     const packageModuleService = container.resolve(
@@ -125,15 +149,20 @@ export default async function handlePackageOrderPlaced({
     const bookingsToCreate = packageItems.map((item: any) => {
       const bookingMetadata: Record<string, any> = {}
 
-      if (typeof item.metadata?.group_id === "string") {
-        bookingMetadata.group_id = item.metadata.group_id
-      }
+if (typeof item.metadata?.group_id === "string") {
+    bookingMetadata.group_id = item.metadata.group_id
+  }
 
-if (orderPreData !== undefined) {
-          bookingMetadata.preData = structuredClone(orderPreData)
-        }
+  const form = item.metadata?.group_id
+    ? formByGroup.get(item.metadata.group_id)
+    : undefined
+  const formPreData = form?.pre_data
+  const effectivePreData = formPreData != null ? formPreData : orderPreData
+  if (effectivePreData !== undefined) {
+    bookingMetadata.preData = structuredClone(effectivePreData)
+  }
 
-        const passengers = item.metadata?.passengers || {}
+  const passengers = item.metadata?.passengers || {}
         const reservedPassengers = (Number(passengers.adults) || 0) + (Number(passengers.children) || 0)
 
         return {
@@ -153,11 +182,27 @@ if (orderPreData !== undefined) {
         }
       })
 
-    const createdBookingsRaw =
-      await packageModuleService.createPackageBookings(bookingsToCreate)
+const createdBookingsRaw =
+        await packageModuleService.createPackageBookings(bookingsToCreate)
     const createdBookings = Array.isArray(createdBookingsRaw)
       ? createdBookingsRaw
       : [createdBookingsRaw]
+
+    // Mark consumed booking forms (use the form RECORD ids, not group_ids)
+    try {
+      const usedForms = [...formByGroup.values()].filter((form) =>
+        packageItems.some(
+          (item: any) => item.metadata?.group_id === form.group_id
+        )
+      )
+      if (usedForms.length > 0) {
+        await bookingFormModuleService.updateBookingForms(
+          usedForms.map((form) => ({ id: form.id, status: "consumed" }))
+        )
+      }
+    } catch (updateError) {
+      // Best-effort: failure to update booking form status should not break booking creation
+    }
 
     const notificationRecipients = await getOrderNotificationEmails(container)
 

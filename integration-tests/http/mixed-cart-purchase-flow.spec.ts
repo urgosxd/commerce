@@ -1,13 +1,11 @@
 import { medusaIntegrationTestRunner } from "@medusajs/test-utils"
 import { Modules, ContainerRegistrationKeys } from "@medusajs/framework/utils"
-import { createPaymentCollectionForCartWorkflow } from "@medusajs/medusa/core-flows"
+import { createPaymentCollectionForCartWorkflow, completeCartWorkflow } from "@medusajs/medusa/core-flows"
 import { TOUR_MODULE, PassengerType as TourPassengerType } from "../../src/modules/tour"
 import TourModuleService from "../../src/modules/tour/service"
 import { PACKAGE_MODULE } from "../../src/modules/package"
 import PackageModuleService from "../../src/modules/package/service"
 import { PassengerType as PackagePassengerType } from "../../src/modules/package/models/package-variant"
-import completeCartWithToursWorkflow from "../../src/modules/tour/workflows/create-tour-booking"
-import completeCartWithPackagesWorkflow from "../../src/workflows/create-package-booking"
 
 jest.setTimeout(120 * 1000)
 
@@ -49,7 +47,7 @@ medusaIntegrationTestRunner({
       let tourProductVariants: any[] = []
       let packageProductVariants: any[] = []
       
-      const testDate = "2026-05-20"
+      const testDate = "2027-02-20"
       const tourCapacity = 20
       const packageCapacity = 20
 
@@ -380,6 +378,82 @@ medusaIntegrationTestRunner({
         packageProductVariants = []
       })
 
+// Helper functions for native workflows with manual subscriber triggers
+      async function completeCartAndTriggerTourSubscriber(cartId: string) {
+        const { result } = await completeCartWorkflow(container).run({ input: { id: cartId } })
+        
+        // completeCartWorkflow emits order.placed internally → subscriber fires async.
+        // Poll for the booking to appear (don't trigger manually — that causes duplicates).
+        for (let i = 0; i < 30; i++) {
+          const tourBookings = await tourModuleService.listTourBookings({ order_id: result.id })
+          const pkgBookings = await packageModuleService.listPackageBookings({ order_id: result.id })
+          if (tourBookings.length > 0 && pkgBookings.length > 0) break
+          if (tourBookings.length > 0 || pkgBookings.length > 0) {
+            await new Promise(r => setTimeout(r, 500))
+            break
+          }
+          await new Promise(r => setTimeout(r, 100))
+        }
+        
+        // result is only { id } — fetch full order to get items, email, status, etc.
+        const { data: [order] } = await query.graph({
+          entity: "order",
+          fields: ["id", "items.*", "email", "status", "metadata", "display_id", "currency_code", "total", "subtotal"],
+          filters: { id: result.id },
+        })
+        return order
+      }
+ 
+      async function completeCartAndTriggerPackageSubscriber(cartId: string) {
+        const { result } = await completeCartWorkflow(container).run({ input: { id: cartId } })
+        
+        // completeCartWorkflow emits order.placed internally → subscriber fires async.
+        // Poll for the booking to appear (don't trigger manually — that causes duplicates).
+        for (let i = 0; i < 30; i++) {
+          const tourBookings = await tourModuleService.listTourBookings({ order_id: result.id })
+          const pkgBookings = await packageModuleService.listPackageBookings({ order_id: result.id })
+          if (tourBookings.length > 0 && pkgBookings.length > 0) break
+          if (tourBookings.length > 0 || pkgBookings.length > 0) {
+            await new Promise(r => setTimeout(r, 500))
+            break
+          }
+          await new Promise(r => setTimeout(r, 100))
+        }
+        
+        // result is only { id } — fetch full order to get items, email, status, etc.
+        const { data: [order] } = await query.graph({
+          entity: "order",
+          fields: ["id", "items.*", "email", "status", "metadata", "display_id", "currency_code", "total", "subtotal"],
+          filters: { id: result.id },
+        })
+        return order
+      }
+ 
+      async function completeCartAndTriggerAllSubscribers(cartId: string) {
+        const { result } = await completeCartWorkflow(container).run({ input: { id: cartId } })
+        
+        // completeCartWorkflow emits order.placed internally → subscriber fires async.
+        // Poll for the bookings to appear (don't trigger manually — that causes duplicates).
+        for (let i = 0; i < 30; i++) {
+          const tourBookings = await tourModuleService.listTourBookings({ order_id: result.id })
+          const pkgBookings = await packageModuleService.listPackageBookings({ order_id: result.id })
+          if (tourBookings.length > 0 && pkgBookings.length > 0) break
+          if (tourBookings.length > 0 || pkgBookings.length > 0) {
+            await new Promise(r => setTimeout(r, 500))
+            break
+          }
+          await new Promise(r => setTimeout(r, 100))
+        }
+        
+        // result is only { id } — fetch full order to get items, email, status, etc.
+        const { data: [order] } = await query.graph({
+          entity: "order",
+          fields: ["id", "items.*", "email", "status", "metadata", "display_id", "currency_code", "total", "subtotal"],
+          filters: { id: result.id },
+        })
+        return order
+      }
+
       /**
        * Helper function to create a mixed cart with both tours and packages
        */
@@ -644,21 +718,14 @@ medusaIntegrationTestRunner({
           )
 
           // Process tours first - this should create order
-          const { result: tourResult } = await completeCartWithToursWorkflow(
-            container
-          ).run({
-            input: {
-              cart_id: cart.id,
-            },
-          })
+          const tourResult = await completeCartAndTriggerTourSubscriber(cart.id)
 
           expect(tourResult).toBeDefined()
-          expect((tourResult as any).order).toBeDefined()
-          expect((tourResult as any).order.id).toBeDefined()
-          expect((tourResult as any).order.email).toBe("tour-only@example.com")
-          expect((tourResult as any).order.items).toHaveLength(4) // All items in order
+          expect((tourResult as any).id).toBeDefined()
+          expect((tourResult as any).email).toBe("tour-only@example.com")
+          expect((tourResult as any).items).toHaveLength(4) // All items in order
 
-          const orderId = (tourResult as any).order.id
+          const orderId = (tourResult as any).id
 
           // Verify tour bookings were created
           const tourBookings = await tourModuleService.listTourBookings({
@@ -677,21 +744,14 @@ medusaIntegrationTestRunner({
           )
 
           // Process packages - this should create order
-          const { result: packageResult } = await completeCartWithPackagesWorkflow(
-            container
-          ).run({
-            input: {
-              cart_id: cart.id,
-            },
-          })
+          const packageResult = await completeCartAndTriggerPackageSubscriber(cart.id)
 
           expect(packageResult).toBeDefined()
-          expect((packageResult as any).order).toBeDefined()
-          expect((packageResult as any).order.id).toBeDefined()
-          expect((packageResult as any).order.email).toBe("package-only@example.com")
-          expect((packageResult as any).order.items).toHaveLength(4) // All items in order
+          expect((packageResult as any).id).toBeDefined()
+          expect((packageResult as any).email).toBe("package-only@example.com")
+          expect((packageResult as any).items).toHaveLength(4) // All items in order
 
-          const orderId = (packageResult as any).order.id
+          const orderId = (packageResult as any).id
 
           // Verify package bookings were created
           const packageBookings = await packageModuleService.listPackageBookings({
@@ -734,11 +794,7 @@ medusaIntegrationTestRunner({
           )
 
           // Process tours workflow
-          await completeCartWithToursWorkflow(container).run({
-            input: {
-              cart_id: cart.id,
-            },
-          })
+          await completeCartAndTriggerTourSubscriber(cart.id)
 
           // Verify tour capacities reduced
           const remainingTour1Capacity = await tourModuleService.getAvailableCapacity(
@@ -765,8 +821,10 @@ medusaIntegrationTestRunner({
               new Date(testDate)
             )
 
-          expect(remainingPackage1Capacity).toBe(packageCapacity)
-          expect(remainingPackage2Capacity).toBe(packageCapacity)
+          // Package capacities also reduced — native completeCartWorkflow emits
+          // order.placed for ALL items, so both subscribers fire
+          expect(remainingPackage1Capacity).toBe(packageCapacity - 1)
+          expect(remainingPackage2Capacity).toBe(packageCapacity - 1)
         })
 
         it("should handle mixed cart with multiple passenger types", async () => {
@@ -795,21 +853,14 @@ medusaIntegrationTestRunner({
             { adults: 1, children: 0, infants: 0 },
             { adults: 1, children: 0, infants: 0 }
           )
-  
-          // Step 1: Run Tour Workflow
-          // This should create the order and the tour bookings
-          console.log("[TEST] Running Tour Workflow...")
-          const { result: tourResult } = await completeCartWithToursWorkflow(
-            container
-          ).run({
-            input: {
-              cart_id: cart.id,
-            },
-          })
-  
-          const orderId = (tourResult as any).order.id
+
+          // Step 1: Run all workflows - this triggers all subscribers
+          console.log("[TEST] Running all workflows...")
+          const result = await completeCartAndTriggerAllSubscribers(cart.id)
+
+          const orderId = (result as any).id
           console.log(`[TEST] Order created: ${orderId}`)
-  
+
           // Verify tour bookings
           const tourBookings = await tourModuleService.listTourBookings({
             order_id: orderId,
@@ -817,21 +868,8 @@ medusaIntegrationTestRunner({
           console.log(`[TEST] Tour bookings created: ${tourBookings.length}`)
           expect(tourBookings.length).toBeGreaterThan(0)
           expect(tourBookings.length).toBeLessThanOrEqual(2)
-  
-          // Step 2: Run Package Workflow
-          console.log("[TEST] Running Package Workflow...")
-          const { result: packageResult } = await completeCartWithPackagesWorkflow(
-            container
-          ).run({
-            input: {
-              cart_id: cart.id,
-            },
-          })
 
-          console.log("[TEST] Package Workflow succeeded!")
-          expect((packageResult as any).order).toBeDefined()
-          expect((packageResult as any).order.id).toBe(orderId)
-
+          // Verify package bookings
           const allPackageBookings = await packageModuleService.listPackageBookings({
             order_id: orderId,
           })

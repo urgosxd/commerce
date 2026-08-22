@@ -53,14 +53,14 @@ export type BookingInput = {
     phone?: string
     formId?: any
   }
-  items?: Array<{
-    variant_id: string
-    quantity?: number
-    unit_price?: number
-    thumbnail?: string
-    metadata?: Record<string, unknown>
-  }>
-}
+items?: Array<{
+     variant_id: string
+     quantity?: number
+     unit_price?: number
+     thumbnail?: string
+     metadata?: Record<string, unknown>
+   }>
+ }
 
 export type PassengerBreakdown = {
   type: "ADULT" | "CHILD" | "INFANT"
@@ -598,8 +598,6 @@ const prepareBookingStep = createStep(
           line_passengers: entry.quantity,
           passengers,
           group_id: groupId,
-          pricing_breakdown: pricingBreakdown,
-          variant_breakdown: variantBreakdown,
           customer_name: customer?.name,
           customer_email: customer?.email,
           customer_phone: customer?.phone,
@@ -668,11 +666,11 @@ export const addBookingToCartWorkflow = createWorkflow(
     // ==================== Prepare booking ====================
     const prepared = prepareBookingStep(input)
 
-    // ==================== Create line items ====================
-    createLineItemsStep({
-      id: input.cart_id,
-      items: prepared.line_items as any,
-    })
+// ==================== Create line items ====================
+     createLineItemsStep({
+       id: input.cart_id,
+       items: prepared.line_items as any,
+     })
 
     // Invalidate cart cache so GET /store/carts/:id returns fresh data
     invalidateCartCacheStep({ cart_id: input.cart_id })

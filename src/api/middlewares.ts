@@ -18,6 +18,9 @@ import { CreatePackageSchema } from "./admin/packages/route"
 import { CreateOrderNotificationEmailSchema } from "./admin/order-notification-emails/route"
 import { customMiddlewares } from "./custom/izipay/callback/middlewares"
 import { defaultStoreCartFields } from "./query-config"
+import { StoreAddTourItemsBody } from "./store/cart/tour-items/validators"
+import { StoreAddPackageItemsBody } from "./store/cart/package-items/validators"
+import { StoreSaveBookingFormBody } from "./store/cart/booking-form/validators"
 
 export const StoreGetCartsCart = createSelectParams()
 
@@ -282,6 +285,24 @@ export default defineMiddlewares({
       middlewares: [
         validateAndTransformBody(CreateOrderNotificationEmailSchema),
       ],
+    },
+    // Store cart tour-items route
+    {
+      matcher: "/store/cart/tour-items",
+      methods: ["POST"],
+      middlewares: [validateAndTransformBody(StoreAddTourItemsBody)],
+    },
+    // Store cart package-items route
+    {
+      matcher: "/store/cart/package-items",
+      methods: ["POST"],
+      middlewares: [validateAndTransformBody(StoreAddPackageItemsBody)],
+    },
+    // Store cart booking-form route
+    {
+      matcher: "/store/cart/booking-form",
+      methods: ["POST"],
+      middlewares: [validateAndTransformBody(StoreSaveBookingFormBody)],
     },
   ]
 })

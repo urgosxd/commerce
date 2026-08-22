@@ -2,6 +2,7 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
 import addBookingToCartWorkflow from "../../../../workflows/add-booking-to-cart"
 import { trackCommerceEvent, type TrackingItem } from "../../../../utils/conversion-tracking"
+import { StoreAddTourItemsBodyType } from "./validators"
 
 type RequestWithAuthContext = MedusaRequest & {
   auth_context?: {
@@ -20,51 +21,31 @@ const throwInvalidData = (message: string, code?: string): never => {
  *
  * Thin wrapper around addBookingToCartWorkflow
  */
-export async function POST(req: MedusaRequest, res: MedusaResponse) {
+export async function POST(req: MedusaRequest<StoreAddTourItemsBodyType>, res: MedusaResponse) {
   try {
     const requestWithAuth = req as RequestWithAuthContext
-    const body = req.body as {
-      cart_id?: string
-      tour_id?: string
-      tour_date?: string
-      adults?: number
-      children?: number
-      infants?: number
-      customer?: {
-        name: string
-        email?: string
-        phone?: string
-        formId?: any
-      }
-      items?: Array<{
-        variant_id: string
-        quantity?: number
-        unit_price?: number
-        thumbnail?: string
-        metadata?: Record<string, unknown>
-      }>
-    }
+    const validatedBody = req.validatedBody
 
     // Validate cart_id
-    if (!body.cart_id) {
+    if (!validatedBody.cart_id) {
       throwInvalidData("Missing required field: cart_id")
     }
 
     // Call the workflow with matching field names
     const { result } = await addBookingToCartWorkflow(req.scope).run({
       input: {
-        cart_id: body.cart_id,
+        cart_id: validatedBody.cart_id,
         type: "tour",
-        id: body.tour_id,
-        date: body.tour_date,
-        adults: Number(body.adults || 0),
-        children: Number(body.children || 0),
-        infants: Number(body.infants || 0),
-        customer: body.customer,
-        items: body.items,
-        pricing_context: (req as any).pricingContext,
-        actor_id: (req as any).auth_context?.actor_id,
-        additional_data: {},
+        id: validatedBody.tour_id,
+        date: validatedBody.tour_date,
+        adults: Number(validatedBody.adults || 0),
+        children: Number(validatedBody.children || 0),
+        infants: Number(validatedBody.infants || 0),
+        customer: validatedBody.customer,
+items: validatedBody.items,
+         pricing_context: (req as any).pricingContext,
+         actor_id: (req as any).auth_context?.actor_id,
+         additional_data: {},
       },
     })
 
@@ -89,8 +70,8 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       items: result.tracking_items,
       description: result.summary.destination,
       user: {
-        email: body.customer?.email,
-        phone: body.customer?.phone,
+        email: validatedBody.customer?.email,
+        phone: validatedBody.customer?.phone,
         externalId: requestWithAuth.auth_context?.actor_id,
       },
     }).catch((err) => {

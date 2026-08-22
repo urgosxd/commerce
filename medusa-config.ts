@@ -156,8 +156,8 @@ module.exports = defineConfig({
   projectConfig: {
     databaseUrl: DATABASE_URL,
     ...(DEPLOYMENT_TYPE === 'local'
-      ? { databaseDriverOptions: { ssl: false, sslmode: 'disable' } }
-      : { databaseDriverOptions: { ssl: { rejectUnauthorized: false } } }),
+      ? { databaseDriverOptions: { connection: { ssl: false } } }
+      : { databaseDriverOptions: { connection: { ssl: { rejectUnauthorized: false } } } }),
     redisUrl: DISABLE_REDIS ? undefined : REDIS_URL,
     workerMode: (process.env.MEDUSA_WORKER_MODE as 'server' | 'worker' | 'shared' | undefined) || 'shared',
     http: {
@@ -327,6 +327,7 @@ module.exports = defineConfig({
     }] : []),
     { resolve: './src/modules/tour' },
     { resolve: './src/modules/package' },
+    { resolve: './src/modules/booking-form' },
     { resolve: './src/modules/order-notification' },
     { resolve: './src/modules/izipay' },
     {

@@ -288,23 +288,6 @@ medusaIntegrationTestRunner({
         expect(adultLineTotal).toBe(200 * 3)
         expect(childLineTotal).toBe(100 * 2)
         expect(Number(cart.item_subtotal)).toBe(adultLineTotal + childLineTotal)
-
-        const adultVariantBreakdown = adultItem.metadata.variant_breakdown.find(
-          (v: any) => v.type === "ADULT"
-        )
-        const childVariantBreakdown = childItem.metadata.variant_breakdown.find(
-          (v: any) => v.type === "CHILD"
-        )
-
-        expect(adultVariantBreakdown).toBeDefined()
-        expect(childVariantBreakdown).toBeDefined()
-
-        expect(adultVariantBreakdown.quantity).toBe(3)
-        expect(childVariantBreakdown.quantity).toBe(2)
-        expect(Number(adultVariantBreakdown.unit_price)).toBe(200)
-        expect(Number(childVariantBreakdown.unit_price)).toBe(100)
-        expect(Number(adultVariantBreakdown.line_total)).toBe(adultLineTotal)
-        expect(Number(childVariantBreakdown.line_total)).toBe(childLineTotal)
       })
 
       it("should inherit package thumbnail when no override provided", async () => {
